@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HSL to sRGB Transition Quantizer</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="dist/app.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <p class="eyebrow">HSL / sRGB transition calculator</p>
+      <h1>HSL補間をsRGB量子化とBezier fitで比較する</h1>
+    </header>
+
+    <form class="control-grid" id="controls">
+      <section class="control-panel" aria-labelledby="start-color-heading">
+        <h2 id="start-color-heading">開始色</h2>
+        <fieldset class="color-panel" data-color-panel="start">
+          <legend>Start HSL color</legend>
+          <label class="color-picker-row">
+            <span>カラーピッカー</span>
+            <input class="color-picker" type="color" id="startColor" value="#3366cc">
+          </label>
+          <label class="control-row">
+            <span>Hue</span>
+            <input class="range-control" type="range" id="startH" min="0" max="360" step="1" value="220">
+            <output class="control-value" for="startH" id="startHValue">220deg</output>
+          </label>
+          <label class="control-row">
+            <span>Saturation</span>
+            <input class="range-control" type="range" id="startS" min="0" max="100" step="1" value="60">
+            <output class="control-value" for="startS" id="startSValue">60%</output>
+          </label>
+          <label class="control-row">
+            <span>Lightness</span>
+            <input class="range-control" type="range" id="startL" min="0" max="100" step="1" value="50">
+            <output class="control-value" for="startL" id="startLValue">50%</output>
+          </label>
+        </fieldset>
+      </section>
+
+      <section class="control-panel" aria-labelledby="end-color-heading">
+        <h2 id="end-color-heading">終了色</h2>
+        <fieldset class="color-panel" data-color-panel="end">
+          <legend>End HSL color</legend>
+          <label class="color-picker-row">
+            <span>カラーピッカー</span>
+            <input class="color-picker" type="color" id="endColor" value="#f2cc33">
+          </label>
+          <label class="control-row">
+            <span>Hue</span>
+            <input class="range-control" type="range" id="endH" min="0" max="360" step="1" value="48">
+            <output class="control-value" for="endH" id="endHValue">48deg</output>
+          </label>
+          <label class="control-row">
+            <span>Saturation</span>
+            <input class="range-control" type="range" id="endS" min="0" max="100" step="1" value="88">
+            <output class="control-value" for="endS" id="endSValue">88%</output>
+          </label>
+          <label class="control-row">
+            <span>Lightness</span>
+            <input class="range-control" type="range" id="endL" min="0" max="100" step="1" value="57">
+            <output class="control-value" for="endL" id="endLValue">57%</output>
+          </label>
+        </fieldset>
+      </section>
+
+      <section class="control-panel control-panel-wide" aria-labelledby="settings-heading">
+        <h2 id="settings-heading">補間設定</h2>
+        <fieldset class="settings-panel">
+          <legend>Interpolation settings</legend>
+          <label class="number-row">
+            <span>フレーム数</span>
+            <input class="number-control" type="number" id="frameCount" min="2" step="1" value="256">
+          </label>
+          <label class="select-row">
+            <span>fit方式</span>
+            <select class="select-control" id="fitMethod">
+              <option value="piecewise-quadratic" selected>Piecewise quadratic Bezier</option>
+              <option value="adaptive-quadratic">Adaptive piecewise quadratic Bezier</option>
+              <option value="adaptive-linear">Adaptive piecewise linear</option>
+            </select>
+          </label>
+          <label class="number-row" id="segmentCountRow">
+            <span>二次Bezier区分数</span>
+            <input class="number-control" type="number" id="segmentCount" min="1" max="32" step="1" value="12">
+          </label>
+          <label class="number-row" id="linearThresholdRow">
+            <span>適応最大誤差</span>
+            <input class="number-control" type="number" id="linearThreshold" min="0.5" max="64" step="0.5" value="3">
+          </label>
+          <button class="button-secondary" type="button" id="resetCurves">補間方法をデフォルトに戻す</button>
+        </fieldset>
+      </section>
+    </form>
+
+    <section class="curve-section" aria-labelledby="curve-heading">
+      <div class="section-heading">
+        <h2 id="curve-heading">Componentwise Bezier補間</h2>
+        <p>各グラフの制御点をドラッグして、H/S/L成分ごとの補間カーブを変更できます。</p>
+      </div>
+      <div class="curve-grid" id="curveEditors"></div>
+    </section>
+
+    <section class="graph-section" aria-labelledby="graph-heading">
+      <div class="section-heading">
+        <h2 id="graph-heading">sRGB component graph</h2>
+        <p>量子化されたsRGBと、RGB成分ごとのBezier fit結果を同じグラフに表示します。</p>
+      </div>
+      <div class="graph-panel">
+        <canvas class="component-graph" id="componentGraph" width="960" height="420"></canvas>
+        <div class="gradient-preview" id="gradientPreview" role="img" aria-live="polite">
+          <span class="gradient-guide" id="gradientGuide" aria-hidden="true"></span>
+        </div>
+        <output class="frame-readout" id="frameReadout" aria-live="polite">グラフまたはグラデーション上にポインターを置くとフレームの値を表示します。</output>
+        <dl class="metric-grid" id="fitMetrics"></dl>
+      </div>
+    </section>
+
+    <section class="output-grid" aria-labelledby="output-heading">
+      <div class="section-heading output-heading">
+        <h2 id="output-heading">出力</h2>
+      </div>
+
+      <article class="output-panel">
+        <header class="panel-header">
+          <h3>量子化sRGB</h3>
+          <button class="button-primary" type="button" id="copyQuantized">JSONをコピー</button>
+        </header>
+        <textarea class="json-output" id="quantizedJson" readonly rows="12"></textarea>
+      </article>
+
+      <article class="output-panel">
+        <header class="panel-header">
+          <h3>Bezier fit</h3>
+          <button class="button-primary" type="button" id="copyFit">JSONをコピー</button>
+        </header>
+        <textarea class="json-output" id="fitJson" readonly rows="12"></textarea>
+      </article>
+    </section>
+
+    <section class="table-section" aria-labelledby="table-heading">
+      <div class="section-heading">
+        <h2 id="table-heading">フレーム一覧</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="frame-table">
+          <thead>
+            <tr>
+              <th scope="col">Frame</th>
+              <th scope="col">Color</th>
+              <th scope="col">sRGB</th>
+              <th scope="col">Hex</th>
+            </tr>
+          </thead>
+          <tbody id="frameTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

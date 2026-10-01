@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "none",
+    "ignoreDeprecations": "6.0",
+    "lib": ["DOM", "ES2022"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "noEmitOnError": true,
+    "removeComments": false,
+    "sourceMap": true
+  },
+  "include": ["app.ts"]
+}
